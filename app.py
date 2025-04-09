@@ -1,6 +1,5 @@
 import pandas as pd
 import spacy
-import subprocess
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -9,15 +8,13 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 import streamlit as st
 from streamlit_extras.add_vertical_space import add_vertical_space
+import os
 
-# --------- Load Spacy NLP and Transformers Once --------- #
-try:
-    nlp = spacy.load("en_core_web_sm")
-except:
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+# Load Spacy model
+nlp = spacy.load("en_core_web_sm")
 
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+# Transformers
+summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")
 sentence_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # --------- Functions --------- #
@@ -39,8 +36,10 @@ def preprocess_text(text):
 def recommend_resolution(query, ticket_texts, resolutions):
     query = preprocess_text(query)
     ticket_texts = [preprocess_text(ticket) for ticket in ticket_texts]
+
     query_emb = sentence_model.encode(query, convert_to_tensor=True)
     ticket_embs = sentence_model.encode(ticket_texts, convert_to_tensor=True)
+
     similarities = util.pytorch_cos_sim(query_emb, ticket_embs)
     best_match_idx = int(similarities.argmax())
     return resolutions[best_match_idx]
@@ -70,26 +69,19 @@ def predict_resolution_time(model, scaler, ticket_length, has_attachment):
     scaled_ticket = scaler.transform(new_ticket)
     return round(model.predict(scaled_ticket)[0], 2)
 
-# --------- Load Data --------- #
+# --------- Load Data (Ensure the files are uploaded to the repo) --------- #
 summarizer_df = pd.read_csv("summarizer_data.csv")
 actions_df = pd.read_csv("action_data.csv")
 resolution_df = pd.read_csv("resolution_data.csv")
 routing_df = pd.read_csv("routing_data.csv")
 time_df = pd.read_csv("time_estimator_data.csv")
 
-# Train routing and time models once
+# Train routing and time models
 vectorizer, clf = train_router_model(routing_df['ticket_text'], routing_df['team_label'])
 time_model, scaler = train_time_predictor(time_df)
 
 # --------- Streamlit UI --------- #
 st.set_page_config(page_title="AI Customer Support", layout="centered")
-st.markdown("""
-    <style>
-    .main {background-color: #f4f6f9; padding: 2rem; border-radius: 1rem;}
-    .stButton>button {width: 100%; border-radius: 8px; font-weight: bold; background-color: #1363DF; color: white;}
-    </style>
-    """, unsafe_allow_html=True)
-
 st.title("🤖 Smart AI Assistant for Customer Support")
 st.caption("Empowered with NLP, ML, and Transformers")
 
@@ -99,16 +91,13 @@ with st.container():
 Agent: I'm sorry to hear that. Have you tried restarting your router?  
 Customer: Yes, multiple times. It's still happening.  
 Agent: I understand. Let me check if there are any outages in your area."""
-
     dialogue_input = st.text_area("Enter Customer-Agent Conversation", sample_dialogue, height=200)
     if st.button("Generate Summary and Response"):
-        with st.spinner("Analyzing conversation..."):
-            summary = summarize_dialog(dialogue_input)
-            agent_reply = generate_professional_reply(summary)
-            st.success("Summary of Conversation")
-            st.write(summary)
-            st.success("Professional Agent Reply")
-            st.write(agent_reply)
+        summary = summarize_dialog(dialogue_input)
+        st.success("Summary of Conversation")
+        st.write(summary)
+        st.success("Professional Agent Reply")
+        st.write(generate_professional_reply(summary))
 
     add_vertical_space(1)
 
