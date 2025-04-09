@@ -1,6 +1,6 @@
-
 import pandas as pd
 import spacy
+import subprocess
 from transformers import pipeline
 from sentence_transformers import SentenceTransformer, util
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -11,7 +11,12 @@ import streamlit as st
 from streamlit_extras.add_vertical_space import add_vertical_space
 
 # --------- Load Spacy NLP and Transformers Once --------- #
-nlp = spacy.load("en_core_web_sm")
+try:
+    nlp = spacy.load("en_core_web_sm")
+except:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
+
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
 sentence_model = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -34,10 +39,8 @@ def preprocess_text(text):
 def recommend_resolution(query, ticket_texts, resolutions):
     query = preprocess_text(query)
     ticket_texts = [preprocess_text(ticket) for ticket in ticket_texts]
-
     query_emb = sentence_model.encode(query, convert_to_tensor=True)
     ticket_embs = sentence_model.encode(ticket_texts, convert_to_tensor=True)
-
     similarities = util.pytorch_cos_sim(query_emb, ticket_embs)
     best_match_idx = int(similarities.argmax())
     return resolutions[best_match_idx]
@@ -68,11 +71,11 @@ def predict_resolution_time(model, scaler, ticket_length, has_attachment):
     return round(model.predict(scaled_ticket)[0], 2)
 
 # --------- Load Data --------- #
-summarizer_df = pd.read_csv(r"C:\Users\pranali ajit jamdade\OneDrive\Desktop\CRM\summarizer_data.csv")
-actions_df = pd.read_csv(r"C:\Users\pranali ajit jamdade\OneDrive\Desktop\CRM\action_data.csv")
-resolution_df = pd.read_csv(r"C:\Users\pranali ajit jamdade\OneDrive\Desktop\CRM\resolution_data.csv")
-routing_df = pd.read_csv(r"C:\Users\pranali ajit jamdade\OneDrive\Desktop\CRM\routing_data.csv")
-time_df = pd.read_csv(r"C:\Users\pranali ajit jamdade\OneDrive\Desktop\CRM\time_estimator_data.csv")
+summarizer_df = pd.read_csv("summarizer_data.csv")
+actions_df = pd.read_csv("action_data.csv")
+resolution_df = pd.read_csv("resolution_data.csv")
+routing_df = pd.read_csv("routing_data.csv")
+time_df = pd.read_csv("time_estimator_data.csv")
 
 # Train routing and time models once
 vectorizer, clf = train_router_model(routing_df['ticket_text'], routing_df['team_label'])
